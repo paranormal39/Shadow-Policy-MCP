@@ -215,7 +215,7 @@ export async function createPollForOrder(
   input: CreatePollInput,
   publish = true,
   audience: PollAudience = 'public',
-): Promise<{ pollId: string; pollUrl: string; published: boolean; status: string; poll: Poll }> {
+): Promise<{ pollId: string; pollUrl: string; published: boolean; status: string; publishError?: string; poll: Poll }> {
   requirePaidOrder(ctx, agentId, invoiceId, ['poll.create', 'poll.premium']);
   return ctx.idempotency.once(`poll:${invoiceId}`, async () => {
     const order = requirePaidOrder(ctx, agentId, invoiceId, ['poll.create', 'poll.premium']);
@@ -229,20 +229,33 @@ export async function createPollForOrder(
         poll,
       };
     }
-    const result = await ctx.shadowlabz.createPoll(input);
+    // Every poll created through this MCP flow is agent-made — tag it so
+    // votechain renders the "Made by AI" badge (the backend only trusts this
+    // from an authenticated API-key caller, which this server is).
+    const result = await ctx.shadowlabz.createPoll({ ...input, createdByAgent: true });
     const pollUrl = `${ctx.config.shadowlabz.publicUrl}/polls/${result.poll.id}`;
 
     // Auto-publish: votechain creates polls as drafts and returns a one-time
     // organizer key; activating (draft -> active) needs that key, which we hold
     // server-side. Best-effort: a failed activation still leaves a valid draft.
     let published = false;
+    let publishError: string | undefined;
     if (publish) {
-      try {
-        await ctx.shadowlabz.activatePoll(result.poll.id, result.organizerKey);
-        published = true;
-      } catch (err) {
-        safeLog.warn('auto-activate failed; poll left as draft', { pollId: result.poll.id, message: (err as Error).message });
+      // Right after creation the backend can briefly 404 the activate (the poll
+      // isn't queryable yet in on-chain mode) — retry with short backoff.
+      const delays = [0, 1500, 3000];
+      for (let i = 0; i < delays.length; i++) {
+        if (delays[i]) await new Promise((r) => setTimeout(r, delays[i]));
+        try {
+          await ctx.shadowlabz.activatePoll(result.poll.id, result.organizerKey);
+          published = true;
+          publishError = undefined;
+          break;
+        } catch (err) {
+          publishError = (err as Error).message;
+        }
       }
+      if (!published) safeLog.warn('auto-activate failed; poll left as draft (retry with shadow_publish_poll)', { pollId: result.poll.id, message: publishError });
     }
 
     if (audience === 'agents') ctx.provenance.setAudience(result.poll.id, 'agents');
@@ -252,7 +265,7 @@ export async function createPollForOrder(
       organizerKey: result.organizerKey, // retained server-side; never returned
       fulfilment: { pollId: result.poll.id, pollUrl, organizerKeyHeld: true, published },
     });
-    return { pollId: result.poll.id, pollUrl, published, status: published ? 'active' : 'draft', poll: result.poll };
+    return { pollId: result.poll.id, pollUrl, published, status: published ? 'active' : 'draft', publishError, poll: result.poll };
   });
 }
 

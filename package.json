@@ -15,11 +15,13 @@
     "dev": "tsx src/server/bin.ts",
     "example": "tsx examples/local-agent/run.ts",
     "agent": "tsx examples/mcp-agent/run.ts",
+    "poll:random": "tsx examples/random-poll/run.ts",
+    "tokens": "tsx scripts/tokens.ts",
+    "legion:bootstrap": "tsx scripts/legion-bootstrap.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@agility-protocol/headless": "file:../agility-headless",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "xrpl": "^4.2.0",
     "zod": "^3.23.8"

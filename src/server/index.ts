@@ -26,14 +26,16 @@ export interface CreatedServer {
   ctx: ServerContext;
 }
 
+/** Build an McpServer whose tools run against a specific (possibly per-request) context. */
+export function createMcpServer(ctx: ServerContext): McpServer {
+  const server = new McpServer({ name: 'shadow-policy-mcp', version: '0.1.0' });
+  registerTools(server, ctx, allTools);
+  return server;
+}
+
 export function createServer(overrides: BuildContextOverrides = {}): CreatedServer {
   const ctx = buildContext(overrides);
-  const server = new McpServer({
-    name: 'shadow-policy-mcp',
-    version: '0.1.0',
-  });
-  registerTools(server, ctx, allTools);
-  return { server, ctx };
+  return { server: createMcpServer(ctx), ctx };
 }
 
 export { buildContext };

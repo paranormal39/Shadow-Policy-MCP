@@ -5,7 +5,7 @@
  * the rest of the Agility ecosystem, and adds HMAC receipt signing.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { canonicalJson, sha256Hex } from '@agility-protocol/headless';
+import { canonicalJson, sha256Hex } from '../vendor/agility/canonical.js';
 
 export { canonicalJson, sha256Hex };
 

@@ -28,6 +28,9 @@ export interface CreatePollInput {
   eligibility?: { method: 'open' | 'qr_rotating' | 'token' | 'code' | 'discord' | 'wallet'; [k: string]: unknown };
   tags?: string[];
   deadlineSeconds?: number;
+  /** Provenance: marks the poll as AI-made. Honored by votechain only for
+   *  authenticated API-key callers (drives a "Made by AI" badge in the UI). */
+  createdByAgent?: boolean;
 }
 
 /** Poll metadata as returned by votechain (loosely typed; we only rely on id/status). */
@@ -55,20 +58,28 @@ export interface ShadowLabzClientOptions {
   baseUrl: string;
   apiKey?: string | null;
   fetchImpl?: typeof fetch;
+  /** Default request timeout (ms) for ordinary reads/writes. */
+  timeoutMs?: number;
+  /** Timeout (ms) for on-chain ops (create/activate) which run a ZK proof and can take minutes. */
+  longTimeoutMs?: number;
 }
 
 export class ShadowLabzClient {
   private readonly baseUrl: string;
   private readonly apiKey: string | null;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
+  private readonly longTimeoutMs: number;
 
   constructor(opts: ShadowLabzClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, '');
     this.apiKey = opts.apiKey ?? null;
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.timeoutMs = opts.timeoutMs ?? 20_000;
+    this.longTimeoutMs = opts.longTimeoutMs ?? 180_000;
   }
 
-  private async request<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
+  private async request<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (init.body !== undefined) headers['content-type'] = 'application/json';
     if (this.apiKey) headers['x-api-key'] = this.apiKey;
@@ -79,7 +90,7 @@ export class ShadowLabzClient {
         method: init.method ?? 'GET',
         headers,
         body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(init.timeoutMs ?? this.timeoutMs),
       });
     } catch (err) {
       throw new ShadowLabzError(`Network error reaching Shadow Labz: ${(err as Error).message}`, 0, 'NETWORK_ERROR');
@@ -105,16 +116,18 @@ export class ShadowLabzClient {
   }
 
   createPoll(input: CreatePollInput): Promise<CreatePollResult> {
-    return this.request<CreatePollResult>('/api/polls', { method: 'POST', body: input });
+    // On-chain mode mirrors the poll to the Shadow Polls contract (ZK proof).
+    return this.request<CreatePollResult>('/api/polls', { method: 'POST', body: input, timeoutMs: this.longTimeoutMs });
   }
 
   getPoll(id: string): Promise<Poll> {
     return this.request<Poll>(`/api/polls/${encodeURIComponent(id)}`);
   }
 
-  /** Publish a draft poll (draft -> active). Requires the one-time organizer key. */
+  /** Publish a draft poll (draft -> active). Requires the one-time organizer key.
+   *  On-chain activation runs a ZK proof and can take minutes, so it uses the long timeout. */
   activatePoll(id: string, organizerKey: string): Promise<unknown> {
-    return this.request(`/api/polls/${encodeURIComponent(id)}/activate`, { method: 'POST', body: { organizerKey } });
+    return this.request(`/api/polls/${encodeURIComponent(id)}/activate`, { method: 'POST', body: { organizerKey }, timeoutMs: this.longTimeoutMs });
   }
 
   listPolls(): Promise<Poll[]> {

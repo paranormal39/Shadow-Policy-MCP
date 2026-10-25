@@ -19,6 +19,7 @@
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -278,9 +279,18 @@ async function main() {
   const userPrompt = process.argv.slice(2).join(' ') || 'Create a poll asking developers which blockchain they prefer, then give me the poll URL.';
   const provider = makeProvider();
 
-  const transport = new StdioClientTransport({ command: 'node', args: [SERVER_ENTRY, '--stdio'], env: process.env as Record<string, string> });
+  // Connect to an already-running HTTP server (MCP_URL), else spawn one over stdio.
   const client = new Client({ name: 'llm-agent-bridge', version: '0.1.0' });
-  await client.connect(transport);
+  if (process.env.MCP_URL) {
+    const headers: Record<string, string> = {};
+    if (process.env.MCP_BEARER) headers['authorization'] = `Bearer ${process.env.MCP_BEARER}`;
+    const transport = new StreamableHTTPClientTransport(new URL(process.env.MCP_URL), { requestInit: { headers } });
+    await client.connect(transport);
+    console.log(`[bridge] connected to MCP server at ${process.env.MCP_URL}`);
+  } else {
+    const transport = new StdioClientTransport({ command: 'node', args: [SERVER_ENTRY, '--stdio'], env: process.env as Record<string, string> });
+    await client.connect(transport);
+  }
 
   const all = (await client.listTools()) as { tools: McpTool[] };
   // Optional: narrow the toolset shown to the model (helps smaller models focus).

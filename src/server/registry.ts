@@ -45,6 +45,11 @@ export function registerTools(server: McpServer, ctx: ServerContext, tools: AnyT
   for (const tool of tools) {
     server.tool(tool.name, tool.description, tool.inputShape, async (args: unknown) => {
       try {
+        // When the caller is authenticated (HTTP + token), bind the agent
+        // identity to the token — never trust an agentId supplied in the body.
+        if (ctx.callerAgentId && args && typeof args === 'object' && 'agentId' in (args as Record<string, unknown>)) {
+          (args as Record<string, unknown>).agentId = ctx.callerAgentId;
+        }
         const data = await tool.handler(ctx, args as never);
         return toToolResult(data);
       } catch (err) {

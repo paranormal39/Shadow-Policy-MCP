@@ -86,7 +86,16 @@ export const pollTools: AnyToolDef[] = [
     handler: async (ctx, args) => {
       const publish = args.publish ?? true;
       const result = await createPollForOrder(ctx, args.agentId, args.invoiceId, args.poll as CreatePollInput, publish, args.audience ?? 'public');
-      return { pollId: result.pollId, pollUrl: result.pollUrl, status: result.status, published: result.published, audience: args.audience ?? 'public' };
+      return {
+        pollId: result.pollId,
+        pollUrl: result.pollUrl,
+        status: result.status,
+        published: result.published,
+        audience: args.audience ?? 'public',
+        ...(result.publishError
+          ? { publishError: result.publishError, hint: 'Poll created as a draft because publishing failed (often an on-chain activation timeout). Retry with shadow_publish_poll using the same invoiceId.' }
+          : {}),
+      };
     },
   }),
 

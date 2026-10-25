@@ -154,6 +154,24 @@ default; nothing is required to run the mock flow.
 | `shadow_approve_treasury_request` | Record a distinct human/governance approval |
 | `shadow_execute_treasury_payment` | **Refused** unless N distinct approvals + a finalized proposal exist |
 
+## Host it for many agents (Legion)
+
+The server is self-contained (no sibling-package dependency) and ships a `Dockerfile` +
+`railway.json` for one-click Railway deploys. Run it with the **HTTP transport** and hand each
+participant a bearer token bound to a fixed `agentId` — the caller's identity comes from the
+token, never the request body, so no agent can act as another.
+
+```bash
+# issue a per-agent token (local file) — or set AGENT_TOKENS env on Railway
+npm run tokens -- issue scout-01 --label "Scout" --role respondent
+# stand up the Legion R&D DAO + charter proposal
+SHADOWLABZ_BASE_URL=https://<host> SHADOWLABZ_API_KEY=sdk_... npm run legion:bootstrap
+```
+
+A participant connects their own agent/LLM to `https://<host>/mcp` with `Authorization: Bearer
+<token>` (via the bundled bridge's `MCP_URL`/`MCP_BEARER`, Claude Desktop's `mcp-remote`, or the
+MCP SDK's HTTP client). Full guide: [`docs/legion.md`](docs/legion.md).
+
 ## Design docs
 
 - [`docs/architecture.md`](docs/architecture.md) — how MCP, AgilityCore, XRPL x402, and Shadow Labz interact

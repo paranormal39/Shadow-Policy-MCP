@@ -60,6 +60,8 @@ export interface ShadowPolicyConfig {
     baseUrl: string;
     publicUrl: string;
     apiKey: string | null;
+    timeoutMs: number;
+    longTimeoutMs: number;
   };
   receiptSigningSecret: string;
   pricing: PricingConfig;
@@ -71,6 +73,8 @@ const envSchema = z.object({
   XRPL_NETWORK: z.enum(['testnet', 'devnet', 'mainnet']).default('testnet'),
   ALLOW_MAINNET: z.string().optional(),
   TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
+  // Railway (and most PaaS) inject PORT; it wins over HTTP_PORT when set.
+  PORT: z.coerce.number().int().positive().max(65535).optional(),
   HTTP_PORT: z.coerce.number().int().positive().max(65535).default(8402),
   HTTP_AUTH_TOKENS: z.string().optional(),
   FACILITATOR: z.enum(['mock', 't54']).default('mock'),
@@ -80,6 +84,8 @@ const envSchema = z.object({
   SHADOWLABZ_BASE_URL: z.string().url().default('http://localhost:3000'),
   SHADOWLABZ_PUBLIC_URL: z.string().url().optional().or(z.literal('')),
   SHADOWLABZ_API_KEY: z.string().optional(),
+  SHADOWLABZ_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  SHADOWLABZ_ONCHAIN_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
   RECEIPT_SIGNING_SECRET: z.string().optional(),
   PRICE_POLL_CREATE_XRP: z.string().default('1'),
   PRICE_POLL_PREMIUM_XRP: z.string().default('2'),
@@ -129,12 +135,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ShadowPolicyCo
     merchantAddress: e.MERCHANT_XRPL_ADDRESS,
     merchantAsset: e.MERCHANT_ASSET,
     transport: e.TRANSPORT,
-    httpPort: e.HTTP_PORT,
+    httpPort: e.PORT ?? e.HTTP_PORT,
     httpAuthTokens: (e.HTTP_AUTH_TOKENS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     shadowlabz: {
       baseUrl,
       publicUrl,
       apiKey: e.SHADOWLABZ_API_KEY && e.SHADOWLABZ_API_KEY.length > 0 ? e.SHADOWLABZ_API_KEY : null,
+      timeoutMs: e.SHADOWLABZ_TIMEOUT_MS,
+      longTimeoutMs: e.SHADOWLABZ_ONCHAIN_TIMEOUT_MS,
     },
     receiptSigningSecret: e.RECEIPT_SIGNING_SECRET && e.RECEIPT_SIGNING_SECRET.length > 0
       ? e.RECEIPT_SIGNING_SECRET
