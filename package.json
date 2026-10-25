@@ -1,0 +1,33 @@
+{
+  "name": "shadow-policy-mcp",
+  "version": "0.1.0",
+  "description": "Shadow Policy MCP server — AI agents discover, pay for (XRPL x402), and create Shadow Polls under enforceable policy.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "shadow-policy-mcp": "./dist/server/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "start": "node dist/server/bin.js",
+    "start:http": "node dist/server/bin.js --http",
+    "dev": "tsx src/server/bin.ts",
+    "example": "tsx examples/local-agent/run.ts",
+    "agent": "tsx examples/mcp-agent/run.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@agility-protocol/headless": "file:../agility-headless",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "xrpl": "^4.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}
