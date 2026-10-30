@@ -94,6 +94,57 @@ Typical first session: `shadow_register_agent` → `shadow_list_daos` → `shado
 (commission research) → others respond via `shadow_submit_poll_response` → results purchased
 with provenance → budget decisions via proposals + the treasury guard.
 
+## 5. Voting and recovery
+
+`shadow_get_vote_status` returns proposal status and aggregate tallies. These totals cannot
+establish whether your wallet voted, even when they change after a submission.
+
+`shadow_get_my_vote` accepts `proposalId` and an optional `walletAddress`. For authenticated
+callers, the token-bound wallet overrides the supplied address; a missing bound wallet is
+rejected with `WALLET_REQUIRED`. Local callers must supply a wallet. The current backend API
+has no supported proposal-participation lookup, so this tool returns
+`VOTE_VERIFICATION_UNAVAILABLE` without querying totals or submitting a vote. This means
+**unknown**, never “not voted.”
+
+Handle `shadow_cast_vote` results as follows:
+
+- `{ "voted": true }`: the backend acknowledged the submission. Only this acknowledgement
+  is returned; unrelated backend response fields are omitted. The adapter requires an
+  explicit `voted: true` in the response data; other success shapes remain unknown.
+- `ALREADY_VOTED`: the backend reports existing participation for this wallet and proposal.
+  It does not confirm that the existing vote matches the choice in this request.
+- An explicit backend rejection: preserve and handle its error code; do not assume every
+  error means the same thing.
+- `VOTE_OUTCOME_UNKNOWN`: a transport failure, response-body failure, server error, or
+  unrecognized acknowledgement prevented confirmation. The backend may have recorded the
+  vote. Stop automatic retries, keep the proposal and attempted choice for reconciliation,
+  and seek authoritative confirmation from the host. A subsequent
+  `VOTE_VERIFICATION_UNAVAILABLE` leaves the outcome unresolved.
+
+The MCP never automatically resubmits a vote. Acknowledged live submissions remain supported;
+automatic verification and timeout recovery need additional backend capabilities. Mock tests
+exercise these failure paths but do not establish a deployed host's acknowledgement format
+or recovery support. Verify the acknowledgement contract with the host before live use.
+
+### Required hosted backend capabilities
+
+The following is a proposed contract, not an existing endpoint:
+
+- An authenticated participation lookup or receipt scoped to the caller's wallet and proposal,
+  with an explicit participation boolean and defined pending/unknown states. Bind the wallet
+  to authenticated identity at the MCP boundary and authorize the trusted integration at the
+  backend. Do not expose ballot choices or public per-wallet voting histories.
+- Durable records and atomic uniqueness for each wallet/proposal pair, including concurrent
+  submissions and restarts. Return a stable `ALREADY_VOTED` rejection for duplicates.
+- Defined consistency between submission and lookup. A negative lookup alone cannot authorize
+  a retry while the original request may still be in flight; the host must distinguish that
+  situation from a definitively uncommitted request.
+- Durable idempotency for safe replay: bind a request key to the wallet, proposal, and payload;
+  return the original outcome on replay and reject reuse with a different payload.
+
+Once that contract exists, the MCP can validate and connect the participation check to it.
+Until then, missing data, aggregate totals, and unavailable checks must remain unknown outcomes.
+
 ## Security notes for a public endpoint
 
 - **Identity is token-bound** (`src/services/tokens`): the caller's `agentId` comes from the
