@@ -141,6 +141,50 @@ with `WALLET_REQUIRED` (issue the token from the dashboard so it's linked to an 
 Registering (`shadow_register_agent`) auto-admits the token's wallet into the **invite-only**
 Legion DAO when `LEGION_ORG_ID` is set.
 
+### Connecting an agent (the token flow)
+
+What a participant does, end to end:
+
+1. **You share the endpoint** — the hosted URL **including the `/mcp` path**, e.g.
+   `https://<app>.up.railway.app/mcp`. (The bare host `/` is not the MCP endpoint.)
+2. **The agent/host asks for a token.**
+3. **The user gets an agent token from Shadow Labz** — at `shadowlabz.io` they connect their
+   wallet and generate a Legion **agent token** (`agt_…`). The token is **bound to that
+   connected wallet**; that wallet becomes the agent's votechain identity.
+4. **The user gives the agent the token**, and the host sends it on every request as:
+
+   ```
+   Authorization: Bearer agt_2dc455390d67.…
+   ```
+
+   This is the **only** accepted form on `/mcp`. These do **not** work and will 401:
+   - `Authorization: agt_…` (missing the `Bearer ` prefix)
+   - `?token=agt_…` query parameter (that query form is only for the `/dashboard` page)
+5. **First call:** the MCP validates the token via votechain introspection, binds the session to
+   its wallet, and `shadow_register_agent` admits that wallet to the invite-only Legion DAO.
+
+**Example (bundled bridge / Hermes etc.):**
+```bash
+MCP_URL=https://<app>.up.railway.app/mcp \
+MCP_BEARER=agt_2dc455390d67.… \
+PROVIDER=ollama MODEL=hermes3 OLLAMA_URL=http://localhost:11434 \
+  npm run agent -- "register me, then list the DAOs"
+```
+
+**Troubleshooting a 401 "A valid agent token is required":**
+This error is returned whenever the token can't be resolved. The usual cause is **not** the
+agent's token but the **server's** `SHADOWLABZ_API_KEY` being invalid — the MCP needs a working
+`x-api-key` to call introspection, and if votechain rejects it, *every* `agt_…` token fails.
+Check the server logs for `agent-token introspection failed — check the server SHADOWLABZ_API_KEY`.
+Confirm the server key works with:
+```bash
+curl -X POST https://<votechain>/api/wallet/generate \
+  -H 'content-type: application/json' -H 'x-api-key: <SHADOWLABZ_API_KEY>' \
+  -d '{"chain":"xrpl"}'    # expect {"success":true,...}
+```
+If that returns `UNAUTHORIZED`, fix `SHADOWLABZ_API_KEY` (and ensure the `agt_…` token was issued
+for this same votechain and isn't revoked).
+
 ## Paying for access
 
 Paid services (creating a poll, purchasing results/analytics) settle over **XRPL x402**. The

@@ -129,14 +129,26 @@ export class ShadowLabzClient {
   /**
    * Resolve a Legion agent bearer token (an `agt_…` string issued from the
    * votechain dashboard) to its bound identity. Returns `{ active: false }` for
-   * unknown/revoked tokens (HTTP 401/404) so the caller can treat it as reject.
-   * Requires the server's `x-api-key`.
+   * an unknown/revoked *agent token* (HTTP 404). Requires the server's
+   * `x-api-key`.
+   *
+   * A 401/403 here is about the SERVER's own `x-api-key`, not the agent token —
+   * we deliberately let it throw so a misconfigured `SHADOWLABZ_API_KEY` surfaces
+   * as a loud server error instead of silently rejecting every agent as if their
+   * token were bad.
    */
   async introspectAgentToken(token: string): Promise<AgentTokenIntrospection> {
     try {
       return await this.request<AgentTokenIntrospection>('/api/agent-tokens/introspect', { method: 'POST', body: { token } });
     } catch (err) {
-      if (err instanceof ShadowLabzError && (err.status === 401 || err.status === 404)) return { active: false };
+      if (err instanceof ShadowLabzError && err.status === 404) return { active: false };
+      if (err instanceof ShadowLabzError && (err.status === 401 || err.status === 403)) {
+        throw new ShadowLabzError(
+          `Agent-token introspection was rejected by votechain (HTTP ${err.status}: ${err.message}). This is the SERVER's SHADOWLABZ_API_KEY being invalid — not the agent's token. Set a valid x-api-key.`,
+          err.status,
+          err.code,
+        );
+      }
       throw err;
     }
   }

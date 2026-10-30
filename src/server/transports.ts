@@ -101,8 +101,10 @@ export async function startHttp(ctx: ServerContext): Promise<void> {
         identity = { agentId: r.agentId ?? r.walletAddress, walletAddress: r.walletAddress, chain: r.chain, roles: r.roles ?? [] };
       }
     } catch (err) {
-      // Fail closed: a backend error means we cannot vouch for the caller.
-      safeLog.error('agent-token introspection failed', { message: (err as Error).message });
+      // Fail closed: a backend error means we cannot vouch for the caller. A
+      // 401/403 here means the SERVER's SHADOWLABZ_API_KEY is invalid (every
+      // agent token will fail until it's fixed) — log it loudly.
+      safeLog.error('agent-token introspection failed — check the server SHADOWLABZ_API_KEY', { message: (err as Error).message });
       identity = null;
     }
     introspectCache.set(key, { identity, exp: now + INTROSPECT_TTL_MS });
