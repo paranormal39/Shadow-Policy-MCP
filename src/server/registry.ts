@@ -13,6 +13,15 @@ export interface ToolDef<Shape extends ZodRawShape = ZodRawShape> {
   name: string;
   description: string;
   inputShape: Shape;
+  /**
+   * The input field naming the wallet that *performs* this action (e.g.
+   * `createdBy`, `walletAddress`, `requestedBy`). When the caller is
+   * token-authenticated, this field is overwritten with the caller's bound
+   * votechain wallet so an agent can only ever act as itself. Fields that name
+   * *other* wallets (recipientAddress, delegateAddress, a human approver) must
+   * NOT be listed here.
+   */
+  callerWalletField?: keyof z.infer<z.ZodObject<Shape>> & string;
   handler: (ctx: ServerContext, args: z.infer<z.ZodObject<Shape>>) => Promise<unknown> | unknown;
 }
 
@@ -44,16 +53,30 @@ function toToolError(err: unknown) {
 export function registerTools(server: McpServer, ctx: ServerContext, tools: AnyToolDef[]): void {
   for (const tool of tools) {
     server.tool(tool.name, tool.description, tool.inputShape, async (args: unknown) => {
+      const startedAt = Date.now();
       try {
-        // When the caller is authenticated (HTTP + token), bind the agent
-        // identity to the token — never trust an agentId supplied in the body.
-        if (ctx.callerAgentId && args && typeof args === 'object' && 'agentId' in (args as Record<string, unknown>)) {
-          (args as Record<string, unknown>).agentId = ctx.callerAgentId;
+        // When the caller is authenticated (HTTP + token), bind identity to the
+        // token — never trust an agentId / actor-wallet supplied in the body.
+        if (ctx.callerAgentId && args && typeof args === 'object') {
+          const a = args as Record<string, unknown>;
+          if ('agentId' in a) a.agentId = ctx.callerAgentId;
+          if (tool.callerWalletField) {
+            if (!ctx.callerWallet) {
+              throw new OperationError(
+                'This action acts on votechain as your wallet, but your token has no wallet bound. Issue the token from the dashboard so it is linked to an address.',
+                'WALLET_REQUIRED',
+              );
+            }
+            a[tool.callerWalletField] = ctx.callerWallet;
+          }
         }
         const data = await tool.handler(ctx, args as never);
+        ctx.stats.recordTool(tool.name, { agentId: ctx.callerAgentId, ok: true, ms: Date.now() - startedAt });
         return toToolResult(data);
       } catch (err) {
         if (!(err instanceof OperationError)) safeLog.error(`tool ${tool.name} failed`, { message: (err as Error).message });
+        const code = err instanceof OperationError ? err.code : 'INTERNAL_ERROR';
+        ctx.stats.recordTool(tool.name, { agentId: ctx.callerAgentId, ok: false, code, ms: Date.now() - startedAt });
         return toToolError(err);
       }
     });

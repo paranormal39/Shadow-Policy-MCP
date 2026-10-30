@@ -21,6 +21,7 @@ import type { CreatePollInput, Poll } from '../integrations/shadowlabz/client.js
 import type { XrplNetwork } from '../config/index.js';
 import type { PollAudience, RespondentType } from './provenance/index.js';
 import { computeAnalytics, type PollAnalytics } from './analytics/index.js';
+import { ShadowLabzError } from '../integrations/shadowlabz/client.js';
 
 export class OperationError extends Error {
   constructor(message: string, readonly code: string) {
@@ -277,6 +278,48 @@ export async function activatePollForOrder(ctx: ServerContext, agentId: string, 
   await ctx.shadowlabz.activatePoll(order.fulfilment.pollId, order.organizerKey);
   ctx.orders.update(invoiceId, { fulfilment: { ...order.fulfilment, published: true } });
   return { pollId: order.fulfilment.pollId, pollUrl: order.fulfilment.pollUrl, status: 'active' };
+}
+
+// ── Legion membership (auto-invite on registration) ─────────────────────────
+
+export interface LegionEnrollment {
+  enrolled: boolean;
+  orgId?: string;
+  walletAddress?: string;
+  reason?: string;
+}
+
+/**
+ * Admit an agent's wallet into the invite-only Legion DAO. Called when an agent
+ * registers so the wallet it authenticated with becomes a member automatically.
+ * Best-effort and idempotent: a missing org / wallet is a no-op, and an existing
+ * membership (DUPLICATE_MEMBER) counts as enrolled.
+ */
+export async function enrollAgentInLegion(
+  ctx: ServerContext,
+  opts: { walletAddress?: string; chain?: string; displayName?: string },
+): Promise<LegionEnrollment> {
+  const orgId = ctx.config.legionOrgId ?? undefined;
+  if (!orgId) return { enrolled: false, reason: 'No Legion DAO configured (set LEGION_ORG_ID).' };
+  if (!opts.walletAddress || !opts.chain) {
+    return { enrolled: false, orgId, reason: 'No wallet bound to this caller; issue the token from the dashboard so it is linked to an address.' };
+  }
+  try {
+    await ctx.shadowlabz.addDaoMember(orgId, {
+      walletAddress: opts.walletAddress,
+      chain: opts.chain,
+      displayName: opts.displayName,
+      role: 'member',
+    });
+    return { enrolled: true, orgId, walletAddress: opts.walletAddress };
+  } catch (err) {
+    // Already a member → treat as success (idempotent).
+    if (err instanceof ShadowLabzError && (err.code === 'DUPLICATE_MEMBER' || err.status === 409)) {
+      return { enrolled: true, orgId, walletAddress: opts.walletAddress, reason: 'already a member' };
+    }
+    safeLog.error('legion enrol failed', { message: (err as Error).message });
+    return { enrolled: false, orgId, walletAddress: opts.walletAddress, reason: (err as Error).message };
+  }
 }
 
 // ── Survey responses (Phase 2) ──────────────────────────────────────────────

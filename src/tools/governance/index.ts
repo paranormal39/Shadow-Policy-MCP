@@ -5,15 +5,18 @@
  */
 import { z } from 'zod';
 import { defineTool, type AnyToolDef } from '../../server/registry.js';
+import { resolveDaoId } from '../shared.js';
 
 const walletSchema = z.string().min(3).max(120);
+const daoIdSchema = z.string().min(1).optional().describe('DAO/org id. Defaults to the configured Legion DAO (LEGION_ORG_ID) when omitted.');
 
 export const governanceTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_create_proposal',
     description: 'Create a governance proposal in a DAO.',
+    callerWalletField: 'createdBy',
     inputShape: {
-      daoId: z.string().min(1),
+      daoId: daoIdSchema,
       createdBy: walletSchema,
       title: z.string().min(3).max(200),
       description: z.string().min(1).max(4000),
@@ -24,15 +27,15 @@ export const governanceTools: AnyToolDef[] = [
     },
     handler: (ctx, args) => {
       const { daoId, ...body } = args;
-      return ctx.shadowlabz.createProposal(daoId, body as Record<string, unknown>);
+      return ctx.shadowlabz.createProposal(resolveDaoId(ctx, daoId), body as Record<string, unknown>);
     },
   }),
 
   defineTool({
     name: 'shadow_get_proposals',
     description: 'List proposals for a DAO.',
-    inputShape: { daoId: z.string().min(1) },
-    handler: (ctx, args) => ctx.shadowlabz.listProposals(args.daoId),
+    inputShape: { daoId: daoIdSchema },
+    handler: (ctx, args) => ctx.shadowlabz.listProposals(resolveDaoId(ctx, args.daoId)),
   }),
 
   defineTool({
@@ -45,6 +48,7 @@ export const governanceTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_cast_vote',
     description: 'Cast a private vote on a proposal (yes/no/abstain). One vote per wallet; duplicates are rejected by the backend.',
+    callerWalletField: 'walletAddress',
     inputShape: {
       proposalId: z.string().min(1),
       walletAddress: walletSchema,

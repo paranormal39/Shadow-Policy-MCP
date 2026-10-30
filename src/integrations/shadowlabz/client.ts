@@ -47,6 +47,17 @@ export interface CreatePollResult {
   organizerKey: string;
 }
 
+/** Result of resolving a Legion agent bearer token via votechain. */
+export interface AgentTokenIntrospection {
+  active: boolean;
+  /** Stable agent identifier, if votechain returns one (else walletAddress is used). */
+  agentId?: string;
+  /** The agent's votechain actor wallet (already enrolled in the Legion DAO). */
+  walletAddress?: string;
+  chain?: string;
+  roles?: string[];
+}
+
 export class ShadowLabzError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string, readonly details?: unknown) {
     super(message);
@@ -79,7 +90,7 @@ export class ShadowLabzClient {
     this.longTimeoutMs = opts.longTimeoutMs ?? 180_000;
   }
 
-  private async request<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
+  private async request<T>(path: string, init: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (init.body !== undefined) headers['content-type'] = 'application/json';
     if (this.apiKey) headers['x-api-key'] = this.apiKey;
@@ -113,6 +124,21 @@ export class ShadowLabzClient {
       );
     }
     return (parsed && 'data' in parsed ? parsed.data : (parsed as unknown)) as T;
+  }
+
+  /**
+   * Resolve a Legion agent bearer token (an `agt_…` string issued from the
+   * votechain dashboard) to its bound identity. Returns `{ active: false }` for
+   * unknown/revoked tokens (HTTP 401/404) so the caller can treat it as reject.
+   * Requires the server's `x-api-key`.
+   */
+  async introspectAgentToken(token: string): Promise<AgentTokenIntrospection> {
+    try {
+      return await this.request<AgentTokenIntrospection>('/api/agent-tokens/introspect', { method: 'POST', body: { token } });
+    } catch (err) {
+      if (err instanceof ShadowLabzError && (err.status === 401 || err.status === 404)) return { active: false };
+      throw err;
+    }
   }
 
   createPoll(input: CreatePollInput): Promise<CreatePollResult> {
@@ -153,6 +179,19 @@ export class ShadowLabzClient {
 
   joinDao(id: string, body: { walletAddress: string; chain: string; displayName?: string; proofHash?: string }): Promise<unknown> {
     return this.request(`/api/orgs/${encodeURIComponent(id)}/join`, { method: 'POST', body });
+  }
+
+  /** Update a DAO's membership/profile settings (admin). Used to set the join
+   *  policy to invite-only. */
+  updateDao(id: string, body: Record<string, unknown>): Promise<unknown> {
+    return this.request(`/api/orgs/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+  }
+
+  /** Directly enrol a member (the API-key integration path on POST
+   *  /api/orgs/{id}/members). For an invite-only DAO this is how the server
+   *  admits an agent by its wallet. */
+  addDaoMember(id: string, body: { walletAddress: string; chain: string; displayName?: string; role?: 'admin' | 'member' | 'observer' }): Promise<unknown> {
+    return this.request(`/api/orgs/${encodeURIComponent(id)}/members`, { method: 'POST', body });
   }
 
   /** DAOs are created via the launchpad: POST /api/projects (org activates later). */

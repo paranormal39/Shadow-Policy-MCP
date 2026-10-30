@@ -81,4 +81,9 @@ export class OrderStore {
       .filter((o) => o.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
+
+  /** All orders, most recent first (for aggregate stats; never exposed raw). */
+  list(): Order[] {
+    return [...this.byInvoice.values()].sort((a, b) => b.createdAt - a.createdAt);
+  }
 }

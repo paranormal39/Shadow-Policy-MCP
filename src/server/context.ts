@@ -11,6 +11,7 @@ import { AgentRegistry } from '../services/agents/index.js';
 import { ProvenanceStore } from '../services/provenance/index.js';
 import { TreasuryGuard } from '../services/treasury/index.js';
 import { TokenRegistry } from '../services/tokens/index.js';
+import { StatsService } from '../services/stats/index.js';
 import { resolve } from 'node:path';
 import { InMemoryIdempotencyStore, type IdempotencyStore } from '../security/idempotency.js';
 import { MockFacilitator } from '../integrations/xrpl/mock-facilitator.js';
@@ -31,9 +32,15 @@ export interface ServerContext {
   provenance: ProvenanceStore;
   treasury: TreasuryGuard;
   tokens: TokenRegistry;
+  stats: StatsService;
   /** When set (HTTP + token auth), the authenticated caller's agentId. Tool
    *  handlers use this instead of trusting an agentId argument. */
   callerAgentId?: string;
+  /** The caller's votechain actor wallet, bound from the token. Tool handlers
+   *  use this for wallet-addressed actions instead of trusting a body wallet. */
+  callerWallet?: string;
+  /** Chain of callerWallet (midnight | xrpl | xahau | cardano). */
+  callerChain?: string;
 }
 
 export interface BuildContextOverrides {
@@ -75,5 +82,6 @@ export function buildContext(overrides: BuildContextOverrides = {}): ServerConte
     provenance: new ProvenanceStore(),
     treasury: new TreasuryGuard(config.treasury),
     tokens: TokenRegistry.load({ envTokens: process.env.AGENT_TOKENS, file: resolve(process.cwd(), '.data/agent-tokens.json') }),
+    stats: new StatsService(),
   };
 }

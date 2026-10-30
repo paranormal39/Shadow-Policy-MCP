@@ -3,9 +3,12 @@
  * caller to a fixed agentId. Tokens are stored as SHA-256 hashes in
  * .data/agent-tokens.json; the plaintext is shown ONCE at issue time.
  *
- *   npm run tokens -- issue <agentId> [--label "Alice's bot"] [--role respondent]
+ *   npm run tokens -- issue <agentId> [--label "Alice's bot"] [--role respondent] [--wallet r...] [--chain xrpl]
  *   npm run tokens -- list
  *   npm run tokens -- revoke <tokenId>
+ *
+ * Note: for the hosted Legion endpoint, tokens are normally issued from the
+ * votechain dashboard and resolved via introspection — this CLI is for local use.
  */
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -48,6 +51,8 @@ function main(): void {
       agentId,
       label: getFlag(rest, 'label'),
       roles: getFlag(rest, 'role') ? [getFlag(rest, 'role')!] : [],
+      walletAddress: getFlag(rest, 'wallet'),
+      chain: getFlag(rest, 'chain'),
       revoked: false,
       createdAt: new Date().toISOString(),
     };
@@ -62,7 +67,7 @@ function main(): void {
 
   if (cmd === 'list') {
     if (data.tokens.length === 0) return void console.log('No tokens issued.');
-    for (const t of data.tokens) console.log(`${t.id}  agentId=${t.agentId}  ${t.revoked ? '[REVOKED]' : 'active'}  ${t.label ?? ''}`);
+    for (const t of data.tokens) console.log(`${t.id}  agentId=${t.agentId}  ${t.revoked ? '[REVOKED]' : 'active'}  ${t.walletAddress ? `wallet=${t.walletAddress}(${t.chain ?? '?'}) ` : ''}${t.label ?? ''}`);
     return;
   }
 

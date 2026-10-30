@@ -8,12 +8,13 @@
 import { z } from 'zod';
 import { defineTool, type AnyToolDef } from '../../server/registry.js';
 import { agentIdSchema } from '../../schemas/index.js';
+import { enrollAgentInLegion } from '../../services/operations.js';
 
 export const marketplaceTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_register_agent',
     description:
-      'Register (or update) a participating agent with its disclosed capabilities and roles. Returns the agent profile including its pairwise DID. Required to respond to agent-audience surveys.',
+      'Register (or update) a participating agent with its disclosed capabilities and roles. Returns the agent profile including its pairwise DID. When connected to the hosted Legion endpoint, the wallet bound to your token is automatically admitted to the (invite-only) Legion DAO. Required to respond to agent-audience surveys.',
     inputShape: {
       agentId: agentIdSchema,
       displayName: z.string().max(80).optional(),
@@ -21,8 +22,16 @@ export const marketplaceTools: AnyToolDef[] = [
       capabilities: z.array(z.string().max(40)).max(32).optional().describe('e.g. ["code","research","vision"]'),
       roles: z.array(z.string().max(40)).max(16).optional().describe('e.g. ["respondent","requester"]'),
     },
-    handler: (ctx, args) =>
-      ctx.agents.register({ agentId: args.agentId, displayName: args.displayName, kind: args.kind, capabilities: args.capabilities, roles: args.roles }),
+    handler: async (ctx, args) => {
+      const profile = ctx.agents.register({ agentId: args.agentId, displayName: args.displayName, kind: args.kind, capabilities: args.capabilities, roles: args.roles });
+      // Auto-invite the authenticated wallet into the invite-only Legion DAO.
+      const legion = await enrollAgentInLegion(ctx, {
+        walletAddress: ctx.callerWallet,
+        chain: ctx.callerChain,
+        displayName: args.displayName ?? profile.displayName,
+      });
+      return { ...profile, legion };
+    },
   }),
 
   defineTool({

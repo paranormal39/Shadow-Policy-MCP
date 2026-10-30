@@ -10,23 +10,26 @@
 import { z } from 'zod';
 import { defineTool, type AnyToolDef } from '../../server/registry.js';
 import { approveTreasuryRequest, createTreasuryRequest, executeTreasuryPayment } from '../../services/operations.js';
+import { resolveDaoId } from '../shared.js';
 
 const walletSchema = z.string().min(3).max(120);
+const daoIdSchema = z.string().min(1).optional().describe('DAO/org id. Defaults to the configured Legion DAO (LEGION_ORG_ID) when omitted.');
 
 export const treasuryTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_get_treasury_balance',
     description: 'Get (or initialise) a DAO\u2019s treasury ledger account.',
-    inputShape: { daoId: z.string().min(1) },
-    handler: (ctx, args) => ctx.shadowlabz.getTreasury(args.daoId),
+    inputShape: { daoId: daoIdSchema },
+    handler: (ctx, args) => ctx.shadowlabz.getTreasury(resolveDaoId(ctx, args.daoId)),
   }),
 
   defineTool({
     name: 'shadow_create_treasury_request',
     description:
       'Create a treasury spend request. Returns a spendRequestId plus the approval policy (how many approvals are needed and whether a finalized proposal is required). This does NOT move money.',
+    callerWalletField: 'requestedBy',
     inputShape: {
-      daoId: z.string().min(1),
+      daoId: daoIdSchema,
       amount: z.union([z.string(), z.number()]),
       recipientAddress: walletSchema,
       purpose: z.string().min(1).max(500),
@@ -37,7 +40,7 @@ export const treasuryTools: AnyToolDef[] = [
     },
     handler: (ctx, args) =>
       createTreasuryRequest(ctx, {
-        orgId: args.daoId,
+        orgId: resolveDaoId(ctx, args.daoId),
         amount: String(args.amount),
         currency: args.currency,
         recipientAddress: args.recipientAddress,
@@ -63,6 +66,7 @@ export const treasuryTools: AnyToolDef[] = [
     name: 'shadow_execute_treasury_payment',
     description:
       'Execute a treasury payment. REFUSED unless the spend has the required distinct approvals and (by policy) a finalized governance proposal. Idempotent per spend request.',
+    callerWalletField: 'authorisedBy',
     inputShape: {
       spendRequestId: z.string().min(1),
       authorisedBy: walletSchema,
@@ -74,7 +78,7 @@ export const treasuryTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_get_treasury_history',
     description: 'Get the DAO\u2019s treasury ledger (deposits + spend requests).',
-    inputShape: { daoId: z.string().min(1) },
-    handler: (ctx, args) => ctx.shadowlabz.getTreasury(args.daoId),
+    inputShape: { daoId: daoIdSchema },
+    handler: (ctx, args) => ctx.shadowlabz.getTreasury(resolveDaoId(ctx, args.daoId)),
   }),
 ];

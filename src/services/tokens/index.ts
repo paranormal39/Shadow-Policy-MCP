@@ -16,6 +16,10 @@ export interface TokenIdentity {
   agentId: string;
   label?: string;
   roles: string[];
+  /** The agent's votechain actor wallet (governance/membership/treasury). */
+  walletAddress?: string;
+  /** Chain the walletAddress belongs to (midnight | xrpl | xahau | cardano). */
+  chain?: string;
 }
 
 export interface TokenFileRecord {
@@ -24,6 +28,8 @@ export interface TokenFileRecord {
   agentId: string;
   label?: string;
   roles?: string[];
+  walletAddress?: string;
+  chain?: string;
   revoked?: boolean;
   createdAt?: string;
 }
@@ -73,7 +79,7 @@ export class TokenRegistry {
       try {
         const data = JSON.parse(readFileSync(opts.file, 'utf8')) as { tokens?: TokenFileRecord[] };
         for (const t of data.tokens ?? []) {
-          if (!t.revoked && t.hash && t.agentId) reg.addHash(t.hash, { agentId: t.agentId, label: t.label, roles: t.roles ?? [] });
+          if (!t.revoked && t.hash && t.agentId) reg.addHash(t.hash, { agentId: t.agentId, label: t.label, roles: t.roles ?? [], walletAddress: t.walletAddress, chain: t.chain });
         }
       } catch {
         /* no file yet — fine */

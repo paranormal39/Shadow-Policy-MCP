@@ -6,9 +6,12 @@
  */
 import { z } from 'zod';
 import { defineTool, type AnyToolDef } from '../../server/registry.js';
+import { resolveDaoId } from '../shared.js';
+import { OperationError } from '../../services/operations.js';
 
 const walletSchema = z.string().min(3).max(120);
 const chainSchema = z.enum(['midnight', 'xrpl', 'xahau', 'cardano']);
+const daoIdSchema = z.string().min(1).optional().describe('DAO/org id. Defaults to the configured Legion DAO (LEGION_ORG_ID) when omitted.');
 
 export const daoTools: AnyToolDef[] = [
   defineTool({
@@ -21,21 +24,22 @@ export const daoTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_get_dao',
     description: 'Get a DAO detail (members, settings, governance).',
-    inputShape: { daoId: z.string().min(1) },
-    handler: (ctx, args) => ctx.shadowlabz.getDao(args.daoId),
+    inputShape: { daoId: daoIdSchema },
+    handler: (ctx, args) => ctx.shadowlabz.getDao(resolveDaoId(ctx, args.daoId)),
   }),
 
   defineTool({
     name: 'shadow_list_dao_members',
     description: 'List a DAO\u2019s members.',
-    inputShape: { daoId: z.string().min(1) },
-    handler: (ctx, args) => ctx.shadowlabz.listDaoMembers(args.daoId),
+    inputShape: { daoId: daoIdSchema },
+    handler: (ctx, args) => ctx.shadowlabz.listDaoMembers(resolveDaoId(ctx, args.daoId)),
   }),
 
   defineTool({
     name: 'shadow_create_dao',
     description:
       'Create a DAO via the launchpad (POST /api/projects). The project becomes an on-chain org after its funding/activation lifecycle; this call creates the project record. Returns the created project.',
+    callerWalletField: 'createdBy',
     inputShape: {
       name: z.string().min(2).max(120),
       createdBy: walletSchema,
@@ -60,14 +64,18 @@ export const daoTools: AnyToolDef[] = [
   defineTool({
     name: 'shadow_join_dao',
     description: 'Self-join a DAO per its join policy (token/NFT/credential gates enforced by the backend).',
+    callerWalletField: 'walletAddress',
     inputShape: {
-      daoId: z.string().min(1),
+      daoId: daoIdSchema,
       walletAddress: walletSchema,
-      chain: chainSchema,
+      chain: chainSchema.optional().describe('Chain of walletAddress. Defaults to the chain bound to your token.'),
       displayName: z.string().max(80).optional(),
       proofHash: z.string().max(200).optional(),
     },
-    handler: (ctx, args) =>
-      ctx.shadowlabz.joinDao(args.daoId, { walletAddress: args.walletAddress, chain: args.chain, displayName: args.displayName, proofHash: args.proofHash }),
+    handler: (ctx, args) => {
+      const chain = args.chain ?? ctx.callerChain;
+      if (!chain) throw new OperationError('No chain provided and none bound to the token.', 'CHAIN_REQUIRED');
+      return ctx.shadowlabz.joinDao(resolveDaoId(ctx, args.daoId), { walletAddress: args.walletAddress, chain, displayName: args.displayName, proofHash: args.proofHash });
+    },
   }),
 ];

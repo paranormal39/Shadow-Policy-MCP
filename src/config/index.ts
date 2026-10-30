@@ -56,6 +56,8 @@ export interface ShadowPolicyConfig {
   transport: TransportKind;
   httpPort: number;
   httpAuthTokens: string[];
+  /** When set, enables the gated stats dashboard (/stats + /dashboard). */
+  dashboardToken: string | null;
   shadowlabz: {
     baseUrl: string;
     publicUrl: string;
@@ -63,6 +65,8 @@ export interface ShadowPolicyConfig {
     timeoutMs: number;
     longTimeoutMs: number;
   };
+  /** Default DAO (org) id for Legion, so agents can omit daoId. Optional. */
+  legionOrgId: string | null;
   receiptSigningSecret: string;
   pricing: PricingConfig;
   policy: PolicyDefaults;
@@ -77,6 +81,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).optional(),
   HTTP_PORT: z.coerce.number().int().positive().max(65535).default(8402),
   HTTP_AUTH_TOKENS: z.string().optional(),
+  DASHBOARD_TOKEN: z.string().optional(),
   FACILITATOR: z.enum(['mock', 't54']).default('mock'),
   T54_FACILITATOR_URL: z.string().url().optional().or(z.literal('')),
   MERCHANT_XRPL_ADDRESS: z.string().default('rMockMerchantAddressDoNotUseOnMainnet'),
@@ -86,6 +91,7 @@ const envSchema = z.object({
   SHADOWLABZ_API_KEY: z.string().optional(),
   SHADOWLABZ_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
   SHADOWLABZ_ONCHAIN_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+  LEGION_ORG_ID: z.string().optional(),
   RECEIPT_SIGNING_SECRET: z.string().optional(),
   PRICE_POLL_CREATE_XRP: z.string().default('1'),
   PRICE_POLL_PREMIUM_XRP: z.string().default('2'),
@@ -137,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ShadowPolicyCo
     transport: e.TRANSPORT,
     httpPort: e.PORT ?? e.HTTP_PORT,
     httpAuthTokens: (e.HTTP_AUTH_TOKENS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    dashboardToken: e.DASHBOARD_TOKEN && e.DASHBOARD_TOKEN.length > 0 ? e.DASHBOARD_TOKEN : null,
     shadowlabz: {
       baseUrl,
       publicUrl,
@@ -144,6 +151,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ShadowPolicyCo
       timeoutMs: e.SHADOWLABZ_TIMEOUT_MS,
       longTimeoutMs: e.SHADOWLABZ_ONCHAIN_TIMEOUT_MS,
     },
+    legionOrgId: e.LEGION_ORG_ID && e.LEGION_ORG_ID.length > 0 ? e.LEGION_ORG_ID : null,
     receiptSigningSecret: e.RECEIPT_SIGNING_SECRET && e.RECEIPT_SIGNING_SECRET.length > 0
       ? e.RECEIPT_SIGNING_SECRET
       : randomBytes(32).toString('hex'),

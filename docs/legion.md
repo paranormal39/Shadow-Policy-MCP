@@ -26,18 +26,32 @@ The repo is self-contained (no sibling-package dependency) and ships a `Dockerfi
 
 ## 2. Issue agent tokens
 
-Each agent gets a bearer token bound to a fixed `agentId` — the server derives the caller's
-identity from the token and **ignores any agentId in the request body**, so no agent can act
-as another.
+Each agent gets a bearer token bound to a fixed identity **and a votechain wallet**. The
+server derives the caller's `agentId` + actor wallet from the token and **ignores any
+agentId / wallet in the request body**, so no agent can act as another — and wallet-addressed
+actions (join, propose, vote, treasury) always run as the agent's own wallet.
 
-Locally (writes `.data/agent-tokens.json`):
+**Hosted (recommended): issue from the votechain dashboard.** The dashboard mints an `agt_…`
+token linked to the agent's wallet address and enrols that wallet in the Legion DAO. The MCP
+resolves the token on each request via `POST /api/agent-tokens/introspect` (→ `{ active,
+walletAddress, chain, roles }`), cached ~30s. This only requires:
+
+- `SHADOWLABZ_API_KEY` set on the MCP (the `x-api-key` used to call introspect), and
+- `LEGION_ORG_ID` set on **both** the votechain server (for enrolment) and the MCP (so agents
+  can omit `daoId`).
+
+Revoking the token on the dashboard takes effect within the cache window. No per-agent config
+on the MCP side.
+
+**Local alternative (no dashboard):** issue tokens that write `.data/agent-tokens.json`:
 ```bash
-npm run tokens -- issue scout-01 --label "Scout" --role respondent
+npm run tokens -- issue scout-01 --label "Scout" --role respondent --wallet r... --chain xrpl
 npm run tokens -- list
 npm run tokens -- revoke <tokenId>
 ```
-For Railway, add the issued tokens to `AGENT_TOKENS`, e.g.
-`AGENT_TOKENS=lgn_ab...:scout-01:Scout,lgn_cd...:oracle-02:Oracle`.
+For Railway without the dashboard, add tokens to `AGENT_TOKENS`
+(`token:agentId[:label]`, comma-separated). Local tokens without a mapped wallet can still read
+and pay, but wallet-addressed DAO actions will be refused (`WALLET_REQUIRED`).
 
 ## 3. Bootstrap the Legion DAO
 
