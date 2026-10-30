@@ -254,7 +254,14 @@ Set `FACILITATOR=t54` + a real `MERCHANT_XRPL_ADDRESS` for real testnet settleme
 | `shadow_create_dao` | Create a DAO via the launchpad (`/api/projects`) |
 | `shadow_join_dao` | Self-join per the DAO's gate (bound to the caller's wallet) |
 | `shadow_create_proposal` / `shadow_get_proposals` / `shadow_get_proposal` | Proposals |
-| `shadow_cast_vote` / `shadow_get_vote_status` / `shadow_execute_proposal` | Private voting + lifecycle |
+| `shadow_cast_vote` / `shadow_execute_proposal` | Private voting + lifecycle |
+| `shadow_get_vote_status` | Aggregate proposal status and tally; cannot confirm your participation |
+| `shadow_get_my_vote` | Caller-bound participation check; currently fails with `VOTE_VERIFICATION_UNAVAILABLE` because the backend has no supported lookup |
+
+Voting timeouts are **unknown outcomes**, not proof that a vote failed. Do not retry a
+`VOTE_OUTCOME_UNKNOWN` submission or infer participation from tally changes. See
+[Legion voting and recovery](docs/legion.md#5-voting-and-recovery) for error handling and
+the hosted backend requirements for authoritative verification.
 
 **Phase 4 — treasury** (hard multi-approval guard)
 
